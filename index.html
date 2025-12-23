@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎄 圣诞物理扭蛋机 - 专业版</title>
+    <title>🎄 圣诞物理扭蛋机 - 专业版 (缓存增强)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <style>
         :root {
@@ -100,6 +100,15 @@
             display: flex; justify-content: center; align-items: center;
             font-weight: bold; font-size: 20px; box-shadow: inset -4px -4px 8px rgba(0,0,0,0.4);
         }
+
+        /* 重置按钮样式 */
+        #reset-btn {
+            position: fixed; bottom: 15px; right: 15px;
+            background: transparent; color: rgba(255,255,255,0.3);
+            border: none; font-size: 12px; cursor: pointer; z-index: 100;
+            text-decoration: underline; transition: color 0.3s;
+        }
+        #reset-btn:hover { color: var(--gold); }
     </style>
 </head>
 <body>
@@ -140,13 +149,32 @@
     <div class="history-rack" id="history"></div>
     <div id="result-ball" class="lucky-ball"></div>
 
+    <button id="reset-btn" onclick="resetLottery()">重新开启新一轮抽奖</button>
+
     <audio id="audio-bgm" loop>
         <source src="./jingle-bells-christmas-454754.mp3" type="audio/mpeg">
     </audio>
     <audio id="audio-knob"><source src="./knob-turn.mp3" type="audio/mpeg"></audio>
     <audio id="audio-shake" loop><source src="./shaking-balls.mp3" type="audio/mpeg"></audio>
     <audio id="audio-win"><source src="./win-tada.mp3" type="audio/mpeg"></audio>
+
 <script>
+    // --- 缓存逻辑 ---
+    const STORAGE_KEY = 'CHRISTMAS_LOTTERY_DRAWN';
+    let drawnPool = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+
+    function saveToCache(num) {
+        drawnPool.push(num);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(drawnPool));
+    }
+
+    function resetLottery() {
+        if(confirm('确定要清除所有抽奖记录并重新开始吗？')) {
+            localStorage.removeItem(STORAGE_KEY);
+            location.reload();
+        }
+    }
+
     // --- 音效处理 ---
     const bgm = document.getElementById('audio-bgm');
     const knobSfx = document.getElementById('audio-knob');
@@ -168,6 +196,11 @@
         bgm.play().catch(e => console.error("播放失败", e));
         initSnow();
         drawSnow();
+        
+        // 判定初始状态
+        if (pool.length === 0) {
+            document.getElementById('status').innerText = "🎄 全部抽完啦！";
+        }
     }
 
     // --- 物理引擎 ---
@@ -188,16 +221,31 @@
     const BALL_COLORS = ['#d42426', '#165b33', '#f0d065', '#ffffff'];
     const TEXT_COLORS = ['#ffffff', '#ffffff', '#5d4037', '#d42426'];
     let ballBodies = [];
-    let pool = Array.from({length: 11}, (_, i) => i + 1);
+    
+    // 初始化池子时过滤掉已抽中的
+    let pool = Array.from({length: 11}, (_, i) => i + 1).filter(n => !drawnPool.includes(n));
     let isDrawing = false;
 
     function createBalls() {
         for (let i = 1; i <= 11; i++) {
             const colorIdx = i % 4;
+            const isDrawn = drawnPool.includes(i);
+            
             const ball = Bodies.circle(100 + Math.random() * 100, 100 + Math.random() * 100, 22, {
                 restitution: 0.8, friction: 0.005, render: { fillStyle: BALL_COLORS[colorIdx] }, label: i.toString()
             });
             ball.colorIdx = colorIdx;
+            
+            // 如果已经抽中过，直接移出物理世界
+            if (isDrawn) {
+                ball.render.visible = false;
+                Body.setPosition(ball, { x: -500, y: -500 });
+                Body.setStatic(ball, true);
+                
+                // 同时直接渲染到历史记录
+                addBallToHistory(i, colorIdx);
+            }
+            
             ballBodies.push(ball);
         }
         Composite.add(world, ballBodies);
@@ -248,12 +296,25 @@
         const winIdx = Math.floor(Math.random() * pool.length);
         const winNum = pool.splice(winIdx, 1)[0];
         const bodyToHide = ballBodies.find(b => b.label == winNum);
+        
         bodyToHide.render.visible = false;
         Body.setPosition(bodyToHide, { x: -500, y: -500 });
         Body.setStatic(bodyToHide, true);
 
+        // 保存到缓存
+        saveToCache(winNum);
+
         winSfx.play();
         showWinner(winNum, bodyToHide.colorIdx);
+    }
+
+    function addBallToHistory(num, cIdx) {
+        const mini = document.createElement('div');
+        mini.className = 'ball-item';
+        mini.style.backgroundColor = BALL_COLORS[cIdx];
+        mini.style.color = TEXT_COLORS[cIdx];
+        mini.innerText = num;
+        document.getElementById('history').appendChild(mini);
     }
 
     function showWinner(num, cIdx) {
@@ -270,12 +331,7 @@
         ], { duration: 700, easing: 'ease-out', fill: 'forwards' });
 
         setTimeout(() => {
-            const mini = document.createElement('div');
-            mini.className = 'ball-item';
-            mini.style.backgroundColor = BALL_COLORS[cIdx];
-            mini.style.color = TEXT_COLORS[cIdx];
-            mini.innerText = num;
-            document.getElementById('history').appendChild(mini);
+            addBallToHistory(num, cIdx);
             resBall.style.display = 'none';
 
             if (pool.length === 0) {

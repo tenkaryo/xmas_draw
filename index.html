@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎄 圣诞物理扭蛋机 - 专业版</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        :root {
+            --machine-red: #d42426;
+            --gold: #f0d065;
+            --pine-green: #165b33;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background: radial-gradient(circle at center, #1a472a, #071a10);
+            height: 100vh; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            overflow: hidden; font-family: "Microsoft YaHei", sans-serif;
+            color: white;
+        }
+
+        /* 启动遮罩层 */
+        #overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 1000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer;
+        }
+        #overlay h2 { color: var(--gold); font-size: 30px; margin-bottom: 20px; }
+        #overlay p { font-size: 18px; }
+
+        /* 雪花与标题 */
+        #snow-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+        .header { z-index: 10; text-align: center; margin-bottom: 10px; }
+        .header h1 { font-size: 32px; color: var(--gold); text-shadow: 0 0 15px rgba(240, 208, 101, 0.6); }
+
+        /* 控制面板 */
+        .controls {
+            position: fixed; top: 20px; right: 20px; z-index: 100;
+            background: rgba(0,0,0,0.6); padding: 15px; border-radius: 15px;
+            border: 1px solid var(--gold); font-size: 14px;
+        }
+        .control-group { margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px;}
+        .control-group:last-child { margin-bottom: 0; }
+        input[type=range] { cursor: pointer; accent-color: var(--gold); }
+
+        /* 扭蛋机主体 */
+        .machine-wrap {
+            position: relative; width: 360px; height: 500px;
+            z-index: 5; display: flex; flex-direction: column; align-items: center;
+        }
+
+        #physics-container {
+            width: 300px; height: 300px; border-radius: 50%;
+            border: 10px solid var(--machine-red);
+            background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.3), rgba(255,255,255,0.05));
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.4), 0 10px 30px rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px); position: relative; z-index: 6; overflow: hidden;
+        }
+
+        .base {
+            width: 320px; height: 220px; background: var(--machine-red);
+            border: 4px solid #fff; border-radius: 20px 20px 60px 60px;
+            margin-top: -50px; z-index: 5; position: relative;
+            display: flex; justify-content: center; box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+        }
+
+        .knob-zone {
+            position: absolute; top: 50px; width: 100px; height: 100px;
+            background: #eee; border-radius: 50%; display: flex;
+            justify-content: center; align-items: center; cursor: pointer;
+            z-index: 20; box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+        }
+
+        .knob-handle {
+            width: 80px; height: 22px;
+            background: linear-gradient(to bottom, var(--gold), #b8860b);
+            border-radius: 11px; box-shadow: 0 4px 0 #8b4513;
+            transition: transform 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        .lucky-ball {
+            position: fixed; z-index: 100; width: 150px; height: 150px;
+            border-radius: 50%; display: none; justify-content: center; align-items: center;
+            font-size: 70px; font-weight: bold; color: #fff; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); box-shadow: 0 0 60px rgba(255,255,255,0.8);
+        }
+
+        .history-rack {
+            margin-top: 20px; width: 95%; max-width: 700px; height: 80px;
+            background: rgba(0,0,0,0.4); border-radius: 40px;
+            display: flex; align-items: center; padding: 0 25px; gap: 12px;
+            border: 2px solid var(--gold); overflow-x: auto; z-index: 10;
+        }
+
+        .ball-item {
+            width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
+            display: flex; justify-content: center; align-items: center;
+            font-weight: bold; font-size: 20px; box-shadow: inset -4px -4px 8px rgba(0,0,0,0.4);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay" onclick="startEverything()">
+        <h2>🎄 圣诞扭蛋抽奖机</h2>
+        <p>点击屏幕开启节日惊喜</p>
+    </div>
+
+    <canvas id="snow-canvas"></canvas>
+
+    <div class="controls">
+        <div class="control-group">
+            <span>🎵 背景音乐</span>
+            <input type="range" id="bgm-vol" min="0" max="1" step="0.1" value="0.5" oninput="updateVolume()">
+        </div>
+        <div class="control-group">
+            <span>🔔 交互音效</span>
+            <input type="range" id="sfx-vol" min="0" max="1" step="0.1" value="1" oninput="updateVolume()">
+        </div>
+    </div>
+
+    <div class="header">
+        <h1>🎄 圣诞幸运扭蛋机 🎄</h1>
+        <div id="status" style="font-size: 20px; margin-top: 10px; height: 30px;">等待抽奖开始...</div>
+    </div>
+
+    <div class="machine-wrap">
+        <div id="physics-container"></div>
+        <div class="base">
+            <div class="knob-zone" onclick="drawBall()">
+                <div class="knob-handle" id="handle"></div>
+            </div>
+            <div style="position:absolute; bottom:20px; width:70px; height:70px; background:#222; border-radius:10px 10px 35px 35px;"></div>
+        </div>
+    </div>
+
+    <div class="history-rack" id="history"></div>
+    <div id="result-ball" class="lucky-ball"></div>
+
+    <audio id="audio-bgm" loop>
+        <source src="./jingle-bells-christmas-454754.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="audio-knob"><source src="./knob-turn.mp3" type="audio/mpeg"></audio>
+    <audio id="audio-shake" loop><source src="./shaking-balls.mp3" type="audio/mpeg"></audio>
+    <audio id="audio-win"><source src="./win-tada.mp3" type="audio/mpeg"></audio>
+<script>
+    // --- 音效处理 ---
+    const bgm = document.getElementById('audio-bgm');
+    const knobSfx = document.getElementById('audio-knob');
+    const shakeSfx = document.getElementById('audio-shake');
+    const winSfx = document.getElementById('audio-win');
+
+    function updateVolume() {
+        const bgmVol = document.getElementById('bgm-vol').value;
+        const sfxVol = document.getElementById('sfx-vol').value;
+        bgm.volume = bgmVol;
+        knobSfx.volume = sfxVol;
+        shakeSfx.volume = sfxVol;
+        winSfx.volume = sfxVol;
+    }
+
+    function startEverything() {
+        document.getElementById('overlay').style.display = 'none';
+        updateVolume();
+        bgm.play().catch(e => console.error("播放失败", e));
+        initSnow();
+        drawSnow();
+    }
+
+    // --- 物理引擎 ---
+    const { Engine, Render, Runner, Bodies, Composite, Events, Body } = Matter;
+    const engine = Engine.create();
+    const world = engine.world;
+    const container = document.getElementById('physics-container');
+    const render = Render.create({
+        element: container, engine: engine,
+        options: { width: 300, height: 300, wireframes: false, background: 'transparent' }
+    });
+
+    for (let i = 0; i < 32; i++) {
+        const angle = (i / 32) * Math.PI * 2;
+        Composite.add(world, Bodies.rectangle(150 + Math.cos(angle) * 145, 150 + Math.sin(angle) * 145, 40, 20, { isStatic: true, angle: angle, render: { visible: false } }));
+    }
+
+    const BALL_COLORS = ['#d42426', '#165b33', '#f0d065', '#ffffff'];
+    const TEXT_COLORS = ['#ffffff', '#ffffff', '#5d4037', '#d42426'];
+    let ballBodies = [];
+    let pool = Array.from({length: 11}, (_, i) => i + 1);
+    let isDrawing = false;
+
+    function createBalls() {
+        for (let i = 1; i <= 11; i++) {
+            const colorIdx = i % 4;
+            const ball = Bodies.circle(100 + Math.random() * 100, 100 + Math.random() * 100, 22, {
+                restitution: 0.8, friction: 0.005, render: { fillStyle: BALL_COLORS[colorIdx] }, label: i.toString()
+            });
+            ball.colorIdx = colorIdx;
+            ballBodies.push(ball);
+        }
+        Composite.add(world, ballBodies);
+    }
+
+    Events.on(render, 'afterRender', () => {
+        const ctx = render.context;
+        ballBodies.forEach(ball => {
+            if (ball.render.visible) {
+                ctx.save();
+                ctx.translate(ball.position.x, ball.position.y);
+                ctx.fillStyle = TEXT_COLORS[ball.colorIdx];
+                ctx.font = "bold 22px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillText(ball.label, 0, 0);
+                ctx.restore();
+            }
+        });
+    });
+
+    Render.run(render);
+    Runner.run(Runner.create(), engine);
+    createBalls();
+
+    // --- 核心逻辑 ---
+    async function drawBall() {
+        if (isDrawing || pool.length === 0) return;
+        isDrawing = true;
+
+        knobSfx.play();
+        document.getElementById('handle').style.transform = "rotate(360deg)";
+        document.getElementById('status').innerText = "🔥 正在摇号...";
+
+        shakeSfx.currentTime = 0;
+        shakeSfx.play();
+        
+        const shakeInterval = setInterval(() => {
+            ballBodies.forEach(ball => {
+                Body.applyForce(ball, ball.position, { x: (Math.random()-0.5)*0.07, y: (Math.random()-0.5)*0.07 - 0.04 });
+            });
+        }, 100);
+
+        await new Promise(r => setTimeout(r, 5000));
+
+        clearInterval(shakeInterval);
+        shakeSfx.pause();
+        document.getElementById('handle').style.transform = "rotate(0deg)";
+
+        const winIdx = Math.floor(Math.random() * pool.length);
+        const winNum = pool.splice(winIdx, 1)[0];
+        const bodyToHide = ballBodies.find(b => b.label == winNum);
+        bodyToHide.render.visible = false;
+        Body.setPosition(bodyToHide, { x: -500, y: -500 });
+        Body.setStatic(bodyToHide, true);
+
+        winSfx.play();
+        showWinner(winNum, bodyToHide.colorIdx);
+    }
+
+    function showWinner(num, cIdx) {
+        const resBall = document.getElementById('result-ball');
+        resBall.innerText = num;
+        resBall.style.backgroundColor = BALL_COLORS[cIdx];
+        resBall.style.color = TEXT_COLORS[cIdx];
+        resBall.style.display = 'flex';
+        
+        resBall.animate([
+            { transform: 'translate(-50%, 100vh) scale(0.1)', opacity: 0 },
+            { transform: 'translate(-50%, -50%) scale(1.2)', opacity: 1 },
+            { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 }
+        ], { duration: 700, easing: 'ease-out', fill: 'forwards' });
+
+        setTimeout(() => {
+            const mini = document.createElement('div');
+            mini.className = 'ball-item';
+            mini.style.backgroundColor = BALL_COLORS[cIdx];
+            mini.style.color = TEXT_COLORS[cIdx];
+            mini.innerText = num;
+            document.getElementById('history').appendChild(mini);
+            resBall.style.display = 'none';
+
+            if (pool.length === 0) {
+                document.getElementById('status').innerText = "🎄 全部抽完啦！";
+            } else {
+                document.getElementById('status').innerText = `恭喜抽中 ${num} 号`;
+                isDrawing = false;
+            }
+        }, 3000);
+    }
+
+    // --- 雪花 ---
+    const canvas = document.getElementById('snow-canvas');
+    const ctx = canvas.getContext('2d');
+    let w, h, flakes = [];
+    function initSnow() {
+        w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight;
+        flakes = Array.from({length: 120}, () => ({ x: Math.random()*w, y: Math.random()*h, r: Math.random()*3+1, d: Math.random() }));
+    }
+    function drawSnow() {
+        ctx.clearRect(0, 0, w, h); ctx.fillStyle = "#fff"; ctx.beginPath();
+        flakes.forEach(f => { ctx.moveTo(f.x, f.y); ctx.arc(f.x, f.y, f.r, 0, Math.PI*2); f.y += f.d + 1; if(f.y > h) f.y = -10; });
+        ctx.fill(); requestAnimationFrame(drawSnow);
+    }
+    window.addEventListener('resize', initSnow);
+</script>
+</body>
+</html>

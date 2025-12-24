@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>圣诞快乐 - Merry Christmas</title>
+    <style>
+        :root {
+            --gold: #f0d065;
+            --pine-green: #165b33;
+            --xmas-red: #d42426; /* 新增圣诞红 */
+        }
+
+        body {
+            margin: 0; padding: 0;
+            /* 背景稍微调暗一点，让光斑更明显 */
+            background: radial-gradient(circle at center, #123520, #05120a);
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column;
+            align-items: center; 
+            justify-content: center;
+            overflow: hidden; 
+            font-family: "Microsoft YaHei", sans-serif;
+            color: white;
+            position: relative;
+        }
+
+        /* --- 新增特效层：梦幻光斑 (Bokeh) --- */
+        #bokeh-container {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 0; /* 放在最底层 */
+            pointer-events: none;
+        }
+        .bokeh-light {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0.2;
+            filter: blur(15px); /* 高斯模糊制造光斑感 */
+            animation: twinkle 6s ease-in-out infinite alternate;
+        }
+        /* 光斑动画：缓慢忽明忽暗 */
+        @keyframes twinkle {
+            0% { transform: scale(1); opacity: 0.15; }
+            100% { transform: scale(1.3); opacity: 0.35; }
+        }
+        /* 光斑颜色 */
+        .bg-red { background: var(--xmas-red); box-shadow: 0 0 20px var(--xmas-red); }
+        .bg-gold { background: var(--gold); box-shadow: 0 0 20px var(--gold); }
+        .bg-green { background: var(--pine-green); box-shadow: 0 0 20px var(--pine-green); }
+
+
+        /* --- 原有雪花画布 (z-index 提升到光斑之上) --- */
+        #snow-canvas { 
+            position: fixed; top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            pointer-events: none; 
+            z-index: 1; 
+        }
+
+        /* --- 中央文字样式修改 --- */
+        .greeting-container {
+            z-index: 10;
+            text-align: center;
+            /* 浮动动画稍微调慢一点更优雅 */
+            animation: float 4s ease-in-out infinite;
+        }
+
+        .greeting-container h1 {
+            /* 使用艺术手写字体栈，如果没有则回退到普通草书 */
+            font-family: "Brush Script MT", "Comic Sans MS", "Segoe Script", cursive;
+            font-size: 80px; /* 稍微加大 */
+            margin: 0;
+            /* 圣诞配色：主体红色，配上白色描边和金色强力发光 */
+            color: var(--xmas-red);
+            text-shadow: 
+                2px 2px 0px #fff, /* 白色描边增加立体感 */
+                0 0 20px var(--gold), /* 内层金色光晕 */
+                0 0 40px var(--gold), /* 外层金色光晕 */
+                0 0 80px rgba(240, 208, 101, 0.5); /* 远景漫射光 */
+            letter-spacing: 3px;
+            line-height: 1.2;
+            /* 稍微旋转一点点角度增加俏皮感 */
+            transform: rotate(-3deg);
+        }
+
+        /* 右上角音乐选择器 (样式保持不变) */
+        .music-control {
+            position: fixed; top: 20px; right: 20px; z-index: 100;
+            background: rgba(0, 0, 0, 0.4); padding: 10px 15px;
+            border-radius: 20px; border: 1px solid rgba(240, 208, 101, 0.3);
+            backdrop-filter: blur(5px); display: flex; align-items: center;
+            gap: 10px; transition: opacity 0.3s;
+        }
+        .music-control:hover { background: rgba(0, 0, 0, 0.6); border-color: var(--gold); }
+        .music-control label { font-size: 14px; color: var(--gold); }
+        .music-control select { background: transparent; color: white; border: none; outline: none; font-size: 14px; cursor: pointer; }
+        #bgm-select { min-width: 120px; }
+        #mode-select { min-width: 80px; width: auto;}
+        .music-control select option { background-color: #071a10; color: white; }
+
+        /* 右下角隐藏入口 (样式保持不变) */
+        .secret-link {
+            position: fixed; bottom: 15px; right: 15px; z-index: 100;
+            color: rgba(255, 255, 255, 0.15); text-decoration: none;
+            font-size: 12px; transition: all 0.3s; cursor: pointer;
+        }
+        .secret-link:hover { color: var(--gold); opacity: 1; text-decoration: underline; }
+
+        /* 简单的浮动动画 */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(-3deg); }
+            50% { transform: translateY(-20px) rotate(-3deg); }
+        }
+
+        /* 移动端适配调整 */
+        @media (max-width: 768px) {
+            .greeting-container h1 { font-size: 50px; }
+            .music-control { flex-direction: column; align-items: flex-end; gap: 5px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="bokeh-container"></div>
+
+    <canvas id="snow-canvas"></canvas>
+
+    <div class="music-control">
+        <label>🎵 BGM</label>
+        <select id="bgm-select" onchange="changeMusic(this.value)"></select>
+        <select id="mode-select" onchange="changeMode(this.value)">
+            <option value="single">单曲循环</option>
+            <option value="list">列表循环</option>
+        </select>
+    </div>
+
+    <div class="greeting-container">
+        <h1>🎄 Merry Christmas 🎄</h1>
+    </div>
+
+    <a href="./draw.html" class="secret-link">Secret Entrance</a>
+
+    <audio id="audio-player"></audio>
+
+<script>
+    // ================= 新增特效：生成背景光斑 =================
+    function createBokehEffect() {
+        const container = document.getElementById('bokeh-container');
+        const colors = ['bg-red', 'bg-gold', 'bg-green'];
+        const count = 35; // 光斑数量
+
+        for (let i = 0; i < count; i++) {
+            const light = document.createElement('div');
+            light.classList.add('bokeh-light');
+            // 随机分配一种颜色
+            light.classList.add(colors[Math.floor(Math.random() * colors.length)]);
+            
+            // 随机大小 (30px 到 100px)
+            const size = Math.random() * 70 + 30 + 'px';
+            light.style.width = size;
+            light.style.height = size;
+            
+            // 随机位置
+            light.style.left = Math.random() * 100 + 'vw';
+            light.style.top = Math.random() * 100 + 'vh';
+            
+            // 随机动画延迟和时长，让闪烁不同步
+            light.style.animationDelay = Math.random() * 5 + 's';
+            light.style.animationDuration = Math.random() * 4 + 4 + 's';
+
+            container.appendChild(light);
+        }
+    }
+    // 立即执行
+    createBokehEffect();
+
+
+    // ================= 以下是原有的音乐和雪花逻辑 (保持不变) =================
+
+    // 背景音乐列表
+    const musicList = [
+        { path: './audio/jingle-bells.mp3', name: 'Jingle Bells' },
+        { path: './audio/广东人的圣诞歌.mp3', name: '广东人的圣诞歌' },
+    ];
+
+    const audioPlayer = document.getElementById('audio-player');
+    const bgmSelect = document.getElementById('bgm-select');
+    const modeSelect = document.getElementById('mode-select');
+    let currentMode = 'single';
+    let currentIndex = 0;
+
+    musicList.forEach((music, index) => {
+        const option = document.createElement('option');
+        option.value = music.path;
+        option.text = music.name;
+        bgmSelect.appendChild(option);
+    });
+
+    function playByIndex(index) {
+        if (index < 0 || index >= musicList.length) return;
+        currentIndex = index;
+        const music = musicList[currentIndex];
+        audioPlayer.src = music.path;
+        bgmSelect.value = music.path;
+        updateLoopAttribute();
+        audioPlayer.play().then(() => {
+            console.log("播放成功: " + music.name);
+        }).catch(e => {
+            console.log("自动播放被拦截");
+        });
+    }
+
+    function changeMusic(path) {
+        const index = musicList.findIndex(m => m.path === path);
+        if (index !== -1) playByIndex(index);
+    }
+
+    function changeMode(mode) {
+        currentMode = mode;
+        updateLoopAttribute();
+    }
+
+    function updateLoopAttribute() {
+        if (currentMode === 'single') {
+            audioPlayer.loop = true;
+        } else {
+            audioPlayer.loop = false;
+        }
+    }
+
+    audioPlayer.addEventListener('ended', () => {
+        if (currentMode === 'list') {
+            let nextIndex = (currentIndex + 1) % musicList.length;
+            playByIndex(nextIndex);
+        }
+    });
+
+    window.addEventListener('load', () => {
+        if (musicList.length > 0) playByIndex(0);
+    });
+
+    let hasInteracted = false;
+    document.body.addEventListener('click', () => {
+        if (!hasInteracted) {
+            if (audioPlayer.paused && audioPlayer.src) audioPlayer.play();
+            hasInteracted = true;
+        }
+    });
+
+
+    // 雪花特效逻辑
+    const canvas = document.getElementById('snow-canvas');
+    const ctx = canvas.getContext('2d');
+    let w, h, flakes = [];
+
+    function initSnow() {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        flakes = Array.from({length: 120}, () => ({
+            x: Math.random() * w,
+            y: Math.random() * h,
+            r: Math.random() * 3 + 1,
+            d: Math.random()
+        }));
+    }
+
+    function drawSnow() {
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        flakes.forEach(f => {
+            ctx.moveTo(f.x, f.y);
+            ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+            f.y += Math.pow(f.d, 2) + 1; 
+            if (f.y > h) {
+                f.y = -10;
+                f.x = Math.random() * w;
+            }
+        });
+        ctx.fill();
+        requestAnimationFrame(drawSnow);
+    }
+
+    window.addEventListener('resize', initSnow);
+    initSnow();
+    drawSnow();
+
+</script>
+</body>
+</html>
